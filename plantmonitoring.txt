@@ -1,0 +1,130 @@
+
+#define BLYNK_PRINT Serial 
+       
+#include <ESP8266WiFi.h>        
+#include <BlynkSimpleEsp8266.h>      
+#include <DHT.h>
+
+#define DHTTYPE DHT11      
+#define dht_dpin 2 
+DHT dht(dht_dpin, DHTTYPE); 
+WiFiClient client;
+SimpleTimer timer;
+
+int sensorpin=A0;
+int moisture_percentage=0;
+
+String apiKey = "MVJOKGYZR47ZKP9D";     
+char server[] = "api.thingspeak.com";
+//const char* server = "api.thingspeak.com";
+
+char auth[] = "mG9jMBG8ilCvEHfDNa7lh1OoYjekVZYh";      
+       
+char ssid[] = "Nikhil Singh"; //WIFI NAME        
+char pass[] = "nks456789"; //PASSWORD  
+
+
+float t;                                    
+float h;
+
+void sendSensor()
+{
+  
+  float h = dht.readHumidity();
+  float t = dht.readTemperature(); 
+  Serial.print("Current humidity = ");
+  Serial.print(h);
+  Serial.print("%  ");
+  Serial.print("\ttemperature = ");
+  Serial.print(t); 
+  Serial.print("\n");
+  Blynk.virtualWrite(V0,t);
+  Blynk.virtualWrite(V1,h);
+  
+} 
+ 
+void setup()        
+{            
+    Blynk.begin(auth, ssid, pass);
+    Blynk.run(); 
+
+    Serial.begin(115200);
+    delay(10);
+
+    dht.begin();
+
+    Serial.println("Connecting to ");
+    Serial.println(ssid);
+ 
+ 
+       WiFi.begin(ssid, pass);
+ 
+      while (WiFi.status() != WL_CONNECTED) 
+     {
+            delay(500);
+            Serial.print(".");
+     }
+      Serial.println("");
+      Serial.println("WiFi connected");
+
+    timer.setInterval(1000L, sendSensor);        
+} 
+
+       
+void loop()        
+{    
+     moisture_percentage = ( 100.00 - ( (analogRead(sensorpin)/1023.00) * 100.00 ) );
+     Serial.print("Soil Moisture(in Percentage) = ");
+     Serial.print(moisture_percentage);
+     Serial.print("%");
+     delay(500);
+
+     if(moisture_percentage<40)
+     {
+         Serial.println("\twater your plant");
+         Blynk.notify("water your plant");
+         delay(500); 
+     }
+     else if(moisture_percentage>55)
+    {
+         Serial.println("\tsoil is wet enough to water");
+         Blynk.notify("soil is wet enough to water");
+         delay(500);
+    }
+  
+    Blynk.virtualWrite(V2,moisture_percentage);
+    
+        
+    timer.run();   
+    
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+
+      if (client.connect(server,80))   
+      {                   
+            String postStr = apiKey;
+            postStr +="&field1=";
+            postStr += String(t);
+            postStr +="&field2=";
+            postStr += String(h);
+            postStr += "&field3=";
+            postStr += String(moisture_percentage);
+            postStr += "\r\n\r\n\r\n";
+ 
+            client.print("POST /update HTTP/1.1\n");
+            client.print("Host: api.thingspeak.com\n");
+            client.print("Connection: close\n");
+            client.print("X-THINGSPEAKAPIKEY: "+apiKey+"\n");
+            client.print("Content-Type: application/x-www-form-urlencoded\n");
+            client.print("Content-Length: ");
+            client.print(postStr.length());
+            client.print("\n\n");
+            client.print(postStr);
+ 
+            Serial.println("Sending to Thingspeak.");
+      }
+      client.stop();
+ 
+      Serial.println("Waiting...");
+      delay(500);
+} 
